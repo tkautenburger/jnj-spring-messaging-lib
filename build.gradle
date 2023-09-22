@@ -1,0 +1,173 @@
+plugins {
+    id "org.springframework.boot" version "${springBootPluginVersion}"
+    id 'io.spring.dependency-management' version "${springDependencyManagementPluginVersion}"
+    id 'java-library'
+    id 'maven-publish'
+    id "net.linguica.maven-settings" version "${mavenSettingsVersion}"
+    id 'checkstyle'
+    id 'pmd'
+    id 'de.aaschmid.cpd' version "${cpdPluginVersion}"
+    id 'com.github.spotbugs' version "${spotbugsPluginVersion}"
+    id "org.owasp.dependencycheck" version "${owaspDependencyCheckVersion}"
+}
+
+/// Standard project properties
+group = 'com.jnj'
+version = '0.0.7'
+def repositoryName = 'jnj-java-feed'
+def repositoryUrl = 'https://pkgs.dev.azure.com/JAJ-MTDF/Nucleus/_packaging/jnj-java-feed/maven/v1'
+
+/// Extra properties
+ext {
+    checkstyleVersion = '10.12.1'
+    pmdVersion = '6.55.0'
+    cpdVersion = '6.55.0'
+    spotbugsVersion = '4.7.3'
+    junit5PitPluginVersion = '1.0.0'
+    apacheCommonsLangVersion='3.13.0'
+}
+
+// Dependencies
+repositories {
+    maven {
+        url repositoryUrl
+        name repositoryName
+        authentication {
+            basic(BasicAuthentication)
+        }
+    }
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.fasterxml.jackson.core:jackson-core:2.15.2'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+    implementation 'io.projectreactor:reactor-core:3.5.10'
+    implementation 'org.reactivestreams:reactive-streams:1.0.3'    
+    implementation 'org.springframework.boot:spring-boot-starter-logging'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    compileOnly 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+// Artifact repository
+publishing {
+    publications {
+        myPublication(MavenPublication) {
+            artifactId rootProject.name
+            from components.java
+            versionMapping {
+                usage('java-api') {
+                    fromResolutionOf('runtimeClasspath')
+                }
+                usage('java-runtime') {
+                    fromResolutionResult()
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            url repositoryUrl
+            name repositoryName
+            authentication {
+                basic(BasicAuthentication)
+            }
+        }
+    }
+}
+
+/// Plugins configuration
+java {
+    sourceCompatibility = '17'
+    withJavadocJar()
+    withSourcesJar()
+}
+
+pmd {
+    toolVersion = "$pmdVersion"
+    ignoreFailures = false
+}
+
+cpd {
+    language = 'java'
+    toolVersion = "$cpdVersion"
+    minimumTokenCount = 100
+}
+
+spotbugs {
+    toolVersion = "$spotbugsVersion"
+}
+
+checkstyle {
+    toolVersion = "$checkstyleVersion"
+    configFile = file("${rootDir}/codechecks/checkstyle/checkstyle.xml")
+    configProperties['checkstyle.suppressions.file'] = file("${rootDir}/codechecks/checkstyle/checkstyle-suppressions.xml").absolutePath
+}
+
+dependencyCheck {
+    suppressionFile = "$rootDir/codechecks/owasp/owasp-suppressions.xml"
+    failBuildOnCVSS = 10
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+/// Tasks configurations
+jar {
+    enabled = true
+    archiveClassifier = ''
+}
+
+bootJar {
+    enabled = false
+}
+
+test {
+    useJUnitPlatform()
+    testLogging.showStandardStreams = true
+}
+
+pmdMain {
+    ruleSets = []
+    ruleSetFiles = files("${rootDir}/codechecks/pmd/ruleset.xml")
+}
+
+cpdCheck {
+    reports {
+        text.enabled = true
+        xml.enabled = false
+    }
+    ignoreAnnotations = true
+    source = sourceSets.main.allJava
+}
+
+spotbugsMain {
+    ignoreFailures = false
+    effort = 'default'
+    excludeFilter = file("$project.rootDir/codechecks/spotbugs/excludeFilter.xml")
+    reports {
+        html.enabled = true
+        xml.enabled = false
+    }
+}
+
+spotbugsTest {
+    ignoreFailures = false
+    effort = 'default'
+    excludeFilter = file("$project.rootDir/codechecks/spotbugs/excludeFilter.xml")
+    reports {
+        html.enabled = true
+        xml.enabled = false
+    }
+}
+
+// Comment next line to stop run OWASP dependency check during the build
+// or use ./gradlew clean dependencyCheckAnalyze
+build.dependsOn 'dependencyCheckAnalyze'
